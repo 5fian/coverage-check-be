@@ -66,7 +66,7 @@ async function runCronJob() {
 						}
 
 						const rowIndex = sheetIds.findIndex((row) => row[0] === submission.id);
-						const updateRange = "Sheet1!K" + (rowIndex + 1); // Assuming you want to update column J
+						const updateRange = "Sheet1!L" + (rowIndex + 1);
 
 						const updateValues = [
 							isCovered ? 'Covered' : 'Not Covered',
