@@ -87,7 +87,7 @@ app.use(
     ],
     maxAge: 600,
     credentials: true,
-  })
+  }),
 );
 
 // Simple API key authentication for non-public endpoints
@@ -106,18 +106,7 @@ app.use("/uploads/*", async (c, next) => {
   // Only serve valid file types
   const path = c.req.path.replace("/uploads/", "");
   const ext = extname(path).toLowerCase();
-  const allowedExts = [
-    ".jpg",
-    ".jpeg",
-    ".png",
-    ".gif",
-    ".webp",
-    ".pdf",
-    ".mp4",
-    ".mov",
-    ".avi",
-    ".webm",
-  ];
+  const allowedExts = [".jpg", ".jpeg", ".png", ".mp4"];
 
   if (!allowedExts.includes(ext)) {
     return c.json({ error: "File type not allowed" }, 403);
@@ -152,9 +141,15 @@ app.get("/api/health", (c) => {
 app.get("/api/salesman", async (c) => {
   try {
     const [rows] = await pool.execute<RowDataPacket[]>(
-      "SELECT name FROM salesman ORDER BY name"
+      "SELECT name, employee_id, branch_id FROM salesman ORDER BY name",
     );
-    return c.json(rows.map((row) => row.name));
+    return c.json(
+      rows.map((row) => ({
+        name: row.name,
+        employee_id: row.employee_id,
+        branch_id: row.branch_id,
+      })),
+    );
   } catch (error) {
     console.error("Error in /api/salesman:", error);
     return c.json(["Firtana", "Ahmad", "Budi"], 200); // Fallback data
@@ -169,19 +164,31 @@ app.get("/api/salesman/search", async (c) => {
     // If query is empty, return a limited set (e.g., top 20 salesmen)
     if (!query.trim()) {
       const [rows] = await pool.execute<RowDataPacket[]>(
-        "SELECT name FROM salesman ORDER BY name LIMIT 20"
+        "SELECT name, employee_id, branch_id FROM salesman ORDER BY name LIMIT 20",
       );
-      return c.json(rows.map((row) => row.name));
+      return c.json(
+        rows.map((row) => ({
+          name: row.name,
+          employee_id: row.employee_id,
+          branch_id: row.branch_id,
+        })),
+      );
     }
 
     // If query is provided, search with LIKE
     const searchPattern = `%${query}%`;
     const [rows] = await pool.execute<RowDataPacket[]>(
-      "SELECT name FROM salesman WHERE name LIKE ? ORDER BY name LIMIT 50",
-      [searchPattern]
+      "SELECT name, employee_id, branch_id FROM salesman WHERE name LIKE ? OR employee_id LIKE ? OR branch_id LIKE ? ORDER BY name LIMIT 50",
+      [searchPattern, searchPattern, searchPattern],
     );
 
-    return c.json(rows.map((row) => row.name));
+    return c.json(
+      rows.map((row) => ({
+        name: row.name,
+        employee_id: row.employee_id,
+        branch_id: row.branch_id,
+      })),
+    );
   } catch (error) {
     console.error("Error in /api/salesman/search:", error);
     // Return empty array instead of fallback data for search
@@ -193,14 +200,14 @@ app.get("/api/salesman/search", async (c) => {
 app.get("/api/building-types", async (c) => {
   try {
     const [rows] = await pool.execute<RowDataPacket[]>(
-      "SELECT type FROM building_types ORDER BY type"
+      "SELECT type FROM building_types ORDER BY type",
     );
     return c.json(rows.map((row) => row.type));
   } catch (error) {
     console.error("Error in /api/building-types:", error);
     return c.json(
       ["Residential", "Commercial", "Industrial", "Mixed-Use"],
-      200
+      200,
     ); // Fallback data
   }
 });
@@ -213,7 +220,7 @@ app.get("/api/submissions/:id/photos/:filename", async (c) => {
     // Validate that the file exists in the database for the given submission ID
     const [rows] = await pool.execute<RowDataPacket[]>(
       `SELECT filename FROM building_photos WHERE submission_id = ? AND filename = ?`,
-      [submissionId, filename]
+      [submissionId, filename],
     );
 
     if (rows.length === 0) {
@@ -279,7 +286,7 @@ app.post("/api/submit-form", async (c) => {
     ];
 
     const missingFields = requiredFields.filter(
-      (field) => !submission[field as keyof typeof submission]
+      (field) => !submission[field as keyof typeof submission],
     );
 
     if (missingFields.length > 0 || submission.operators!.length === 0) {
@@ -291,11 +298,11 @@ app.post("/api/submit-form", async (c) => {
             missingFields.length > 0 && submission.operators!.length === 0
               ? " and operators"
               : submission.operators!.length === 0
-              ? "operators"
-              : ""
+                ? "operators"
+                : ""
           }`,
         },
-        400
+        400,
       );
     }
 
@@ -313,7 +320,7 @@ app.post("/api/submit-form", async (c) => {
           success: false,
           message: `Missing validation fields: coordinates`,
         },
-        400
+        400,
       );
     }
 
@@ -333,7 +340,7 @@ app.post("/api/submit-form", async (c) => {
             success: false,
             message: "Files must be less than 10MB each",
           },
-          400
+          400,
         );
       }
 
@@ -356,7 +363,7 @@ app.post("/api/submit-form", async (c) => {
 
     const [salesmanRows] = await pool.execute<RowDataPacket[]>(
       "SELECT * FROM salesman WHERE name = ?",
-      [submission.salesmanName]
+      [submission.salesmanName],
     );
     const salesman = salesmanRows ? salesmanRows[0] : null;
 
@@ -377,7 +384,7 @@ app.post("/api/submit-form", async (c) => {
         submission.buildingType,
         JSON.stringify(submission.operators),
         submission.remarks,
-      ]
+      ],
     );
 
     // Insert building photos if any
@@ -385,7 +392,7 @@ app.post("/api/submit-form", async (c) => {
       for (const photo of submission.buildingPhotos) {
         await connection.execute(
           `INSERT INTO building_photos (submission_id, filename) VALUES (?, ?)`,
-          [submission.id, photo]
+          [submission.id, photo],
         );
       }
     }
@@ -410,15 +417,15 @@ app.post("/api/submit-form", async (c) => {
       const range = "Sheet1!A1"; // Just specify the sheet, not actual last row
 
       let branch = "Medan";
-      if (salesman && salesman['branchId'] == '062') {
+      if (salesman && salesman["branchId"] == "062") {
         branch = "Bali";
-      } else if (salesman && salesman['branchId'] == '025') {
+      } else if (salesman && salesman["branchId"] == "025") {
         branch = "Nusa Id";
-      } else if (salesman && salesman['branchId'] == '027') {
+      } else if (salesman && salesman["branchId"] == "027") {
         branch = "Binjai";
-      } else if (salesman && salesman['branchId'] == '028') {
+      } else if (salesman && salesman["branchId"] == "028") {
         branch = "Nusafiber Selecta";
-      } else if (salesman && salesman['branchId'] == '029') {
+      } else if (salesman && salesman["branchId"] == "029") {
         branch = "Tj. Morawa";
       }
 
@@ -437,12 +444,12 @@ app.post("/api/submit-form", async (c) => {
                 (photo) =>
                   `${process.env.API_URL}/${
                     process.env.APP_ENV === "development" ? "api" : "xapi"
-                  }/submissions/${submission.id}/photos/${photo}`
+                  }/submissions/${submission.id}/photos/${photo}`,
               )
               .join(", ")
           : "",
         submission.remarks,
-        branch
+        branch,
       ];
       if (hasFSOperator) {
         const response2 = await sheets.spreadsheets.values.append({
@@ -456,7 +463,7 @@ app.post("/api/submit-form", async (c) => {
         if (response2.status === 200 || response2.status === 201) {
           await connection.execute(
             `UPDATE submissions SET writeToFSOperatorSpreadsheetAt = ? WHERE id = ?`,
-            [formattedTimestamp, submission.id]
+            [formattedTimestamp, submission.id],
           );
         }
       }
@@ -473,7 +480,7 @@ app.post("/api/submit-form", async (c) => {
       if (response1.status == 200 || response1.status == 201) {
         await connection.execute(
           `UPDATE submissions SET writeToAllOperatorSpreadsheetAt = ? WHERE id = ?`,
-          [formattedTimestamp, submission.id]
+          [formattedTimestamp, submission.id],
         );
       }
     } catch (error) {
@@ -516,7 +523,7 @@ app.post("/api/submit-form", async (c) => {
                   (photo) =>
                     `${process.env.API_URL}/${
                       process.env.APP_ENV === "development" ? "api" : "xapi"
-                    }/submissions/${submission.id}/photos/${photo}`
+                    }/submissions/${submission.id}/photos/${photo}`,
                 )
                 .join(", ")
             : "",
@@ -528,7 +535,7 @@ app.post("/api/submit-form", async (c) => {
           const checkCoverageBotId = response.data.data[0]?.id;
           await connection.execute(
             `UPDATE submissions SET checkCoverageBotId = ? WHERE id = ?`,
-            [checkCoverageBotId, submission.id]
+            [checkCoverageBotId, submission.id],
           );
         }
       } catch (error) {
@@ -557,7 +564,7 @@ app.post("/api/submit-form", async (c) => {
         success: false,
         message: "Server error processing submission",
       },
-      500
+      500,
     );
   }
 });
@@ -618,7 +625,7 @@ app.get("/api/submissions/:id", apiKeyAuth, async (c) => {
        LEFT JOIN building_photos bp ON s.id = bp.submission_id
        WHERE s.id = ?
        GROUP BY s.id`,
-      [id]
+      [id],
     );
 
     if (submissionRows.length === 0) {
@@ -660,16 +667,30 @@ app.get("/api/submissions/:id", apiKeyAuth, async (c) => {
 // Add a new salesman
 app.post("/api/salesman", apiKeyAuth, async (c) => {
   try {
-    const { name } = await c.req.json();
+    const { name, employee_id, branch_id } = await c.req.json();
 
     if (!name || typeof name !== "string" || name.trim() === "") {
       return c.json({ error: "Valid name is required" }, 400);
     }
+    if (
+      !employee_id ||
+      typeof employee_id !== "string" ||
+      employee_id.trim() === ""
+    ) {
+      return c.json({ error: "Employee ID is required" }, 400);
+    }
+    if (
+      !branch_id ||
+      typeof branch_id !== "string" ||
+      branch_id.trim() === ""
+    ) {
+      return c.json({ error: "Branch ID is required" }, 400);
+    }
 
     // Check if the salesman already exists
     const [existingRows] = await pool.execute<RowDataPacket[]>(
-      "SELECT * FROM salesman WHERE name = ?",
-      [name.trim()]
+      "SELECT * FROM salesman WHERE employee_id = ?",
+      [employee_id ? employee_id.trim() : ""],
     );
 
     if (existingRows.length > 0) {
@@ -677,13 +698,20 @@ app.post("/api/salesman", apiKeyAuth, async (c) => {
     }
 
     // Add the new salesman
-    await pool.execute("INSERT INTO salesman (name) VALUES (?)", [name.trim()]);
+    await pool.execute(
+      "INSERT INTO salesman (name, employee_id, branch_id) VALUES (?, ?, ?)",
+      [name.trim(), employee_id.trim(), branch_id.trim()],
+    );
 
     // Get all salesmen to return in the response
     const [rows] = await pool.execute<RowDataPacket[]>(
-      "SELECT name FROM salesman ORDER BY name"
+      "SELECT name, employee_id, branch_id FROM salesman ORDER BY name",
     );
-    const salesmanData = rows.map((row) => row.name);
+    const salesmanData = rows.map((row) => ({
+      name: row.name,
+      employee_id: row.employee_id,
+      branch_id: row.branch_id,
+    }));
 
     return c.json({ success: true, salesmanData });
   } catch (error) {
@@ -704,7 +732,7 @@ app.post("/api/building-types", apiKeyAuth, async (c) => {
     // Check if the building type already exists
     const [existingRows] = await pool.execute<RowDataPacket[]>(
       "SELECT * FROM building_types WHERE type = ?",
-      [type.trim()]
+      [type.trim()],
     );
 
     if (existingRows.length > 0) {
@@ -718,7 +746,7 @@ app.post("/api/building-types", apiKeyAuth, async (c) => {
 
     // Get all building types to return in the response
     const [rows] = await pool.execute<RowDataPacket[]>(
-      "SELECT type FROM building_types ORDER BY type"
+      "SELECT type FROM building_types ORDER BY type",
     );
     const buildingTypes = rows.map((row) => row.type);
 
@@ -737,7 +765,7 @@ app.get("/api/villages/search", async (c) => {
     // If query is empty, return a limited set from postal_codes
     if (!query.trim()) {
       const [rows] = await pool.execute<RowDataPacket[]>(
-        "SELECT CONCAT(postal_code, ', ', village, ', ', district, ', ', city, ', ', province) AS name FROM postal_codes LIMIT 5"
+        "SELECT CONCAT(postal_code, ', ', village, ', ', district, ', ', city, ', ', province) AS name FROM postal_codes LIMIT 5",
       );
       return c.json(rows.map((row) => row.name));
     }
@@ -746,7 +774,7 @@ app.get("/api/villages/search", async (c) => {
     const searchPattern = `%${query}%`;
     const [rows] = await pool.execute<RowDataPacket[]>(
       "SELECT CONCAT(postal_code, ', ', village, ', ', district, ', ', city, ', ', province) AS name FROM postal_codes WHERE postal_code LIKE ? OR village LIKE ? OR district LIKE ? OR city LIKE ? LIMIT 20",
-      [searchPattern, searchPattern, searchPattern, searchPattern]
+      [searchPattern, searchPattern, searchPattern, searchPattern],
     );
 
     return c.json(rows.map((row) => row.name));
@@ -772,7 +800,7 @@ app.onError((err, c) => {
         error: err.message,
         status: err.status,
       },
-      err.status
+      err.status,
     );
   }
 
@@ -781,7 +809,7 @@ app.onError((err, c) => {
       error: "Internal Server Error",
       status: 500,
     },
-    500
+    500,
   );
 });
 
