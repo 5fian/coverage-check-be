@@ -1,7 +1,7 @@
 import axios from "axios";
 import { randomUUID } from "crypto";
 import { createReadStream, existsSync } from "fs";
-import { mkdir, stat } from "fs/promises";
+import { mkdir, readFile, stat } from "fs/promises";
 import { google } from "googleapis";
 import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
@@ -324,6 +324,18 @@ app.post("/api/submit-form", async (c) => {
       );
     }
 
+    // validate customer home number length
+    if (submission.customerHomeNo && submission.customerHomeNo.length > 40) {
+      if (connection) connection.release();
+      return c.json(
+        {
+          success: false,
+          message: "customerHomeNo must be at most 40 characters",
+        },
+        400,
+      );
+    }
+
     let hasFSOperator = submission.operators?.includes("FS");
 
     // Handle file uploads
@@ -570,15 +582,36 @@ app.post("/api/submit-form", async (c) => {
 });
 
 // List submissions (protected admin endpoint)
+// Supports pagination via `page` (default 1) and `limit` (default 100, max 100) query params.
+// With no query params, returns the 100 most recent submissions.
 app.get("/api/submissions", apiKeyAuth, async (c) => {
+  const DEFAULT_LIMIT = 100;
+  const MAX_LIMIT = 100;
+
+  let page = parseInt(c.req.query("page") || "1", 10);
+  if (!Number.isInteger(page) || page < 1) page = 1;
+
+  let limit = parseInt(c.req.query("limit") || String(DEFAULT_LIMIT), 10);
+  if (!Number.isInteger(limit) || limit < 1) limit = DEFAULT_LIMIT;
+  if (limit > MAX_LIMIT) limit = MAX_LIMIT;
+
+  const offset = (page - 1) * limit;
+
   try {
-    const [submissionsRows] = await pool.execute<RowDataPacket[]>(`
-      SELECT s.*, GROUP_CONCAT(bp.filename) as photo_filenames
+    const [countRows] = await pool.execute<RowDataPacket[]>(
+      "SELECT COUNT(*) as total FROM submissions",
+    );
+    const total = Number(countRows[0]?.total ?? 0);
+
+    const [submissionsRows] = await pool.query<RowDataPacket[]>(
+      `SELECT s.*, GROUP_CONCAT(bp.filename) as photo_filenames
       FROM submissions s
       LEFT JOIN building_photos bp ON s.id = bp.submission_id
       GROUP BY s.id
       ORDER BY s.timestamp DESC
-    `);
+      LIMIT ? OFFSET ?`,
+      [limit, offset],
+    );
 
     // Format the data to match the expected structure
     const submissions = submissionsRows.map((row) => {
@@ -607,10 +640,24 @@ app.get("/api/submissions", apiKeyAuth, async (c) => {
       };
     });
 
-    return c.json(submissions);
+    return c.json({
+      data: submissions,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.max(Math.ceil(total / limit), 1),
+      },
+    });
   } catch (error) {
     console.error("Error fetching submissions:", error);
-    return c.json([], 200);
+    return c.json(
+      {
+        data: [],
+        pagination: { page, limit, total: 0, totalPages: 1 },
+      },
+      200,
+    );
   }
 });
 
@@ -824,6 +871,41 @@ app.get("/api/villages/search", async (c) => {
     // Return empty array instead of fallback data for search
     return c.json([], 200);
   }
+});
+
+// Raw OpenAPI spec
+app.get("/api/openapi.yaml", async (c) => {
+  try {
+    const spec = await readFile(join(process.cwd(), "openapi.yaml"), "utf8");
+    return c.text(spec, 200, { "Content-Type": "application/yaml" });
+  } catch (error) {
+    console.error("Error reading OpenAPI spec:", error);
+    return c.json({ error: "OpenAPI spec not found" }, 404);
+  }
+});
+
+// API docs page (Swagger UI, rendered from the OpenAPI spec above)
+app.get("/api/docs", (c) => {
+  return c.html(`<!DOCTYPE html>
+<html>
+  <head>
+    <title>Coverage Check API Docs</title>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+  </head>
+  <body>
+    <div id="swagger-ui"></div>
+    <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+    <script>
+      window.onload = () => {
+        SwaggerUIBundle({
+          url: "/api/openapi.yaml",
+          dom_id: "#swagger-ui",
+        });
+      };
+    </script>
+  </body>
+</html>`);
 });
 
 // Catch-all route to serve the Next.js frontend
