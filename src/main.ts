@@ -48,6 +48,7 @@ type FormSubmission = {
   village: string;
   coordinates: string;
   buildingType: string;
+  serviceType: string;
   operators: string[];
   buildingPhotos?: string[];
   remarks?: string;
@@ -269,6 +270,7 @@ app.post("/api/submit-form", async (c) => {
       village: formData.get("village") as string,
       coordinates: formData.get("coordinates") as string,
       buildingType: formData.get("buildingType") as string,
+      serviceType: formData.get("serviceType") as string,
       operators: (formData.getAll("operators") as string[]) || [],
       buildingPhotos: [],
       remarks: formData.get("remarks") as string,
@@ -283,6 +285,7 @@ app.post("/api/submit-form", async (c) => {
       "village",
       "coordinates",
       "buildingType",
+      "serviceType",
     ];
 
     const missingFields = requiredFields.filter(
@@ -382,8 +385,8 @@ app.post("/api/submit-form", async (c) => {
     // Insert submission into database
     await connection.execute(
       `INSERT INTO submissions
-      (id, timestamp, salesmanName, customerName, customerAddress, customerHomeNo, village, coordinates, buildingType, operators, remarks)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (id, timestamp, salesmanName, customerName, customerAddress, customerHomeNo, village, coordinates, buildingType, serviceType, operators, remarks)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         submission.id,
         submission.timestamp, // Now using the correctly formatted timestamp
@@ -394,6 +397,7 @@ app.post("/api/submit-form", async (c) => {
         submission.village,
         submission.coordinates,
         submission.buildingType,
+        submission.serviceType,
         JSON.stringify(submission.operators),
         submission.remarks,
       ],
@@ -469,7 +473,7 @@ app.post("/api/submit-form", async (c) => {
           range,
           valueInputOption: "USER_ENTERED",
           requestBody: {
-            values: [values],
+            values: [[...values, submission.serviceType]],
           },
         });
         if (response2.status === 200 || response2.status === 201) {
@@ -480,7 +484,7 @@ app.post("/api/submit-form", async (c) => {
         }
       }
 
-      values.push(submission.operators?.join(", "));
+      values.push(submission.operators?.join(", "), submission.serviceType);
       const response1 = await sheets.spreadsheets.values.append({
         spreadsheetId: allCheckCoverageSpreadsheetId,
         range,
@@ -631,6 +635,7 @@ app.get("/api/submissions", apiKeyAuth, async (c) => {
         village: row.village, // Include village field that was missing
         coordinates: row.coordinates,
         buildingType: row.buildingType,
+        serviceType: row.serviceType,
         operators:
           typeof row?.operators === "string"
             ? JSON.parse(row?.operators)
@@ -696,6 +701,7 @@ app.get("/api/submissions/:id", apiKeyAuth, async (c) => {
       village: row?.village, // Include village field that was missing
       coordinates: row?.coordinates,
       buildingType: row?.buildingType,
+      serviceType: row?.serviceType,
       operators:
         typeof row?.operators === "string"
           ? JSON.parse(row?.operators)

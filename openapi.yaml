@@ -255,6 +255,7 @@ paths:
                 - village
                 - coordinates
                 - buildingType
+                - serviceType
                 - operators
               properties:
                 salesmanName:
@@ -274,6 +275,13 @@ paths:
                   example: "3.5952,98.6722"
                 buildingType:
                   type: string
+                serviceType:
+                  type: string
+                  enum:
+                    - Broadband Home
+                    - Broadband Business
+                    - Dedicated
+                    - Migrasi
                 operators:
                   type: array
                   items:
@@ -484,6 +492,9 @@ components:
           type: string
         buildingType:
           type: string
+        serviceType:
+          type: string
+          nullable: true
         operators:
           type: array
           items:
