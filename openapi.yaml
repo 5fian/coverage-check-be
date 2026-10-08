@@ -271,7 +271,7 @@ paths:
                   type: string
                 coordinates:
                   type: string
-                  description: "Format: `latitude,longitude`"
+                  description: "Format: `latitude,longitude`. Latitude must be within -90..90, longitude within -180..180"
                   example: "3.5952,98.6722"
                 buildingType:
                   type: string

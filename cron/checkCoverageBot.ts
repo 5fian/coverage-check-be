@@ -52,7 +52,8 @@ async function runCronJob() {
           "x-api-key": process.env.FS_CHECK_COVERAGE_BOT_API_KEY,
         };
 
-        const vill = submission.village?.split(",");
+        const vill = submission.village?.split(",").map((v: string) => v.trim());
+        const coords = submission.coordinates?.split(",").map((v: string) => v.trim());
         const residenceType =
           submission.buildingType === "ruko" ? "ruko" : "perumahan";
         const residenceName = residenceType == "ruko" ? "ruko" : "rumah";
@@ -77,8 +78,8 @@ async function runCronJob() {
           customer_name: submission.customerName,
           street_name: submission.customerAddress,
           home_no: submission.customerHomeNo,
-          latitude: submission.coordinates?.split(",")[0],
-          longitude: submission.coordinates?.split(",")[1],
+          latitude: coords?.[0],
+          longitude: coords?.[1],
           province: vill?.[4],
           city: vill?.[3],
           subdistrict: vill?.[2],

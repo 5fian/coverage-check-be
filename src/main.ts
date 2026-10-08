@@ -311,10 +311,15 @@ app.post("/api/submit-form", async (c) => {
 
     // validate coordinates format
     const coordinatesRegex = /^(-?\d+(\.\d+)?),\s*(-?\d+(\.\d+)?)$/;
+    const [lat, lng] = (submission?.coordinates ?? "")
+      .split(",")
+      .map((v) => Number(v.trim()));
     if (
       !(
         submission?.coordinates &&
-        coordinatesRegex.test(submission?.coordinates)
+        coordinatesRegex.test(submission?.coordinates) &&
+        Math.abs(lat) <= 90 &&
+        Math.abs(lng) <= 180
       )
     ) {
       if (connection) connection.release();
@@ -513,7 +518,8 @@ app.post("/api/submit-form", async (c) => {
           "x-api-key": process.env.FS_CHECK_COVERAGE_BOT_API_KEY,
         };
 
-        const vill = submission.village?.split(",");
+        const vill = submission.village?.split(",").map((v: string) => v.trim());
+        const coords = submission.coordinates?.split(",").map((v: string) => v.trim());
         const residenceType =
           submission.buildingType === "ruko" ? "ruko" : "perumahan";
         const residenceName = residenceType == "ruko" ? "ruko" : "rumah";
@@ -523,8 +529,8 @@ app.post("/api/submit-form", async (c) => {
           customer_name: submission.customerName,
           street_name: submission.customerAddress,
           home_no: submission.customerHomeNo,
-          latitude: submission.coordinates?.split(",")[0],
-          longitude: submission.coordinates?.split(",")[1],
+          latitude: coords?.[0],
+          longitude: coords?.[1],
           province: vill?.[4],
           city: vill?.[3],
           subdistrict: vill?.[2],
